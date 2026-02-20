@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CC Manager">
+<title>CC Web Manager</title>
+
+<link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;CC Web Manager&quot;,&quot;short_name&quot;:&quot;CC Manager&quot;,&quot;start_url&quot;:&quot;/&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%230d1117&quot;,&quot;theme_color&quot;:&quot;%230d1117&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>&quot;,&quot;sizes&quot;:&quot;any&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;}]}">
+
+<style>
+/* ===== CSS 变量 ===== */
+:root {
+  --bg:        #0d1117;
+  --bg2:       #161b22;
+  --bg3:       #21262d;
+  --border:    #30363d;
+  --text:      #e6edf3;
+  --text-dim:  #7d8590;
+  --accent:    #58a6ff;
+  --green:     #3fb950;
+  --yellow:    #d29922;
+  --red:       #f85149;
+  --purple:    #bc8cff;
+  --orange:    #ffa657;
+  --radius:    10px;
+  --tab-h:     56px;
+  --safe-bot:  env(safe-area-inset-bottom, 0px);
+}
+
+/* ===== 重置 ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ===== 布局 ===== */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.page {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 12px 0;
+}
+.page.active { display: flex; flex-direction: column; }
+
+/* ===== 底部 Tab 栏 ===== */
+.tab-bar {
+  display: flex;
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  height: calc(var(--tab-h) + var(--safe-bot));
+  padding-bottom: var(--safe-bot);
+  flex-shrink: 0;
+}
+.tab-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 10px;
+  cursor: pointer;
+  transition: color .15s;
+  padding: 6px 0;
+}
+.tab-btn .icon { font-size: 22px; line-height: 1; }
+.tab-btn.active { color: var(--accent); }
+
+/* ===== 通用卡片 ===== */
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+/* ===== 按钮 ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s;
+  white-space: nowrap;
+}
+.btn:active { opacity: .7; }
+.btn-primary  { background: var(--accent); color: #0d1117; }
+.btn-success  { background: var(--green);  color: #0d1117; }
+.btn-danger   { background: var(--red);    color: #fff; }
+.btn-warn     { background: var(--yellow); color: #0d1117; }
+.btn-ghost    { background: var(--bg3);    color: var(--text); border: 1px solid var(--border); }
+.btn-sm       { padding: 6px 12px; font-size: 13px; }
+.btn-block    { width: 100%; }
+
+/* ===== 状态徽章 ===== */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.badge-pending    { background: #30363d; color: var(--text-dim); }
+.badge-planning   { background: #1f3a5f; color: var(--accent); }
+.badge-plan_review{ background: #3a2e00; color: var(--yellow); }
+.badge-executing  { background: #1a3a1a; color: var(--green); }
+.badge-completed  { background: #1a3a1a; color: var(--green); }
+.badge-failed     { background: #3a1a1a; color: var(--red); }
+
+/* ===== 任务输入区 ===== */
+.input-area {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  align-items: flex-end;
+}
+.input-wrap {
+  flex: 1;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+textarea.task-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 15px;
+  padding: 12px;
+  resize: none;
+  min-height: 48px;
+  max-height: 180px;
+  font-family: inherit;
+  line-height: 1.5;
+  outline: none;
+}
+.voice-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 20px;
+  padding: 12px 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.voice-btn.listening { color: var(--red); animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+
+/* ===== 任务卡片 ===== */
+.task-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.task-card:active { border-color: var(--accent); }
+.task-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+}
+.task-prompt {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.task-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.task-detail {
+  display: none;
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--border);
+}
+.task-detail.open { display: block; }
+.task-full-prompt {
+  background: var(--bg3);
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 13px;
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.task-log-preview {
+  background: #0d1117;
+  border-radius: 6px;
+  padding: 10px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 12px;
+  color: #7ee787;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: 10px;
+}
+.task-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ===== 日志终端 ===== */
+.terminal {
+  flex: 1;
+  background: #0d1117;
+  border-radius: var(--radius);
+  padding: 12px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 12px;
+  color: #7ee787;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--border);
+  min-height: 200px;
+}
+.terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.terminal-title { font-size: 13px; color: var(--text-dim); }
+.terminal-dots { display: flex; gap: 5px; }
+.terminal-dots span {
+  width: 10px; height: 10px; border-radius: 50%;
+}
+.dot-red    { background: #ff5f57; }
+.dot-yellow { background: #febc2e; }
+.dot-green  { background: #28c840; }
+
+/* ===== 文件浏览器 ===== */
+.file-list { list-style: none; }
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 14px;
+}
+.file-item:last-child { border-bottom: none; }
+.file-item:active { background: var(--bg3); }
+.file-icon { font-size: 18px; width: 24px; text-align: center; }
+.file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-size { font-size: 11px; color: var(--text-dim); }
+.file-content {
+  background: var(--bg3);
+  border-radius: 6px;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: pre;
+  margin-top: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.breadcrumb-item { color: var(--accent); cursor: pointer; }
+.breadcrumb-sep  { color: var(--text-dim); }
+.breadcrumb-cur  { color: var(--text-dim); }
+
+/* ===== Git 日志 ===== */
+.commit-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.commit-item:last-child { border-bottom: none; }
+.commit-hash { font-family: monospace; font-size: 11px; color: var(--purple); }
+.commit-msg  { font-size: 13px; margin: 2px 0; }
+.commit-meta { font-size: 11px; color: var(--text-dim); }
+
+/* ===== 状态页 ===== */
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.stat-box {
+  background: var(--bg3);
+  border-radius: var(--radius);
+  padding: 12px;
+  text-align: center;
+}
+.stat-num { font-size: 28px; font-weight: 700; }
+.stat-lbl { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.progress-content {
+  background: var(--bg3);
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+/* ===== 加载、空态 ===== */
+.spinner {
+  display: inline-block;
+  width: 18px; height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty { text-align: center; color: var(--text-dim); padding: 40px 0; font-size: 14px; }
+.section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+/* ===== Toast ===== */
+#toast {
+  position: fixed;
+  bottom: calc(var(--tab-h) + var(--safe-bot) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 18px;
+  border-radius: 99px;
+  font-size: 13px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .2s;
+  white-space: nowrap;
+  z-index: 999;
+}
+#toast.show { opacity: 1; }
+
+/* ===== 选择器 ===== */
+select.filter-select {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+}
+</style>
+</head>
+
+<body>
+<div id="app">
+
+  <!-- ====== 任务页 ====== -->
+  <div class="page active" id="page-tasks">
+
+    <!-- 输入区 -->
+    <div class="input-area">
+      <div class="input-wrap">
+        <textarea class="task-input" id="task-input"
+          placeholder="描述你的任务…&#10;Claude Code 会帮你完成"
+          rows="2"
+          oninput="autoResize(this)"></textarea>
+        <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" title="语音输入">🎤</button>
+      </div>
+      <button class="btn btn-primary" onclick="submitTask()" style="height:48px;border-radius:var(--radius)">
+        发送
+      </button>
+    </div>
+
+    <!-- 筛选 -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <span class="section-title">任务列表</span>
+      <select class="filter-select" id="status-filter" onchange="loadTasks()">
+        <option value="">全部</option>
+        <option value="pending">待执行</option>
+        <option value="executing">执行中</option>
+        <option value="completed">已完成</option>
+        <option value="failed">失败</option>
+      </select>
+    </div>
+
+    <div id="tasks-list">
+      <div class="empty"><div class="spinner"></div><br>加载中…</div>
+    </div>
+  </div>
+
+  <!-- ====== 日志页 ====== -->
+  <div class="page" id="page-logs">
+    <div class="terminal-header">
+      <div class="terminal-dots">
+        <span class="dot-red"></span>
+        <span class="dot-yellow"></span>
+        <span class="dot-green"></span>
+      </div>
+      <span class="terminal-title" id="log-title">选择一个执行中的任务</span>
+      <button class="btn btn-ghost btn-sm" onclick="clearLog()">清屏</button>
+    </div>
+
+    <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select class="filter-select" id="log-task-select" onchange="switchLogTask()">
+        <option value="">-- 选择任务 --</option>
+      </select>
+      <label style="font-size:13px;color:var(--text-dim);display:flex;align-items:center;gap:4px">
+        <input type="checkbox" id="auto-scroll" checked style="accent-color:var(--accent)">
+        自动滚动
+      </label>
+    </div>
+
+    <div class="terminal" id="log-output">等待任务输出…</div>
+  </div>
+
+  <!-- ====== 文件页 ====== -->
+  <div class="page" id="page-files">
+    <div class="breadcrumb" id="breadcrumb">
+      <span class="breadcrumb-item" onclick="browseFiles('')">🏠 根目录</span>
+    </div>
+
+    <div class="card" id="file-browser">
+      <div class="empty"><div class="spinner"></div><br>加载中…</div>
+    </div>
+
+    <!-- Git 日志 -->
+    <div class="section-title" style="margin-top:6px">Git 提交记录</div>
+    <div class="card" id="git-log">
+      <div class="empty"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <!-- ====== 状态页 ====== -->
+  <div class="page" id="page-status">
+    <div class="stat-grid" id="stat-grid">
+      <div class="stat-box"><div class="stat-num" id="s-pending">—</div><div class="stat-lbl">待执行</div></div>
+      <div class="stat-box"><div class="stat-num" id="s-executing">—</div><div class="stat-lbl">执行中</div></div>
+      <div class="stat-box"><div class="stat-num" id="s-completed">—</div><div class="stat-lbl">已完成</div></div>
+      <div class="stat-box"><div class="stat-num" id="s-failed">—</div><div class="stat-lbl">失败</div></div>
+    </div>
+
+    <div class="section-title">Worktree 状态</div>
+    <div class="card" id="worktree-list">
+      <div class="empty">加载中…</div>
+    </div>
+
+    <div class="section-title" style="margin-top:6px">PROGRESS.md</div>
+    <div class="progress-content" id="progress-content">加载中…</div>
+
+    <div style="margin-bottom:16px"></div>
+  </div>
+
+  <!-- ====== 底部 Tab 栏 ====== -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" id="tab-tasks"  onclick="switchTab('tasks')">
+      <span class="icon">📋</span>任务
+    </button>
+    <button class="tab-btn" id="tab-logs"  onclick="switchTab('logs')">
+      <span class="icon">📟</span>日志
+    </button>
+    <button class="tab-btn" id="tab-files" onclick="switchTab('files')">
+      <span class="icon">📁</span>文件
+    </button>
+    <button class="tab-btn" id="tab-status" onclick="switchTab('status')">
+      <span class="icon">⚙️</span>状态
+    </button>
+  </nav>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ============================================================
+// 工具函数
+// ============================================================
+
+const TOKEN = (() => {
+  const params = new URLSearchParams(location.search);
+  const t = params.get('token');
+  if (t) { localStorage.setItem('cc_token', t); return t; }
+  return localStorage.getItem('cc_token') || '';
+})();
+
+function api(path, opts = {}) {
+  const sep = path.includes('?') ? '&' : '?';
+  return fetch(path + sep + 'token=' + encodeURIComponent(TOKEN), {
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    ...opts,
+  }).then(r => {
+    if (!r.ok) return r.json().then(e => Promise.reject(e.detail || r.statusText));
+    return r.json();
+  });
+}
+
+function wsUrl(path) {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${location.host}${path}?token=${encodeURIComponent(TOKEN)}`;
+}
+
+let _toastTimer;
+function toast(msg, duration = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+}
+
+function fmtTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso + (iso.endsWith('Z') ? '' : 'Z'));
+  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtSize(bytes) {
+  if (bytes == null) return '';
+  if (bytes < 1024) return bytes + 'B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
+  return (bytes / 1024 / 1024).toFixed(1) + 'MB';
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 180) + 'px';
+}
+
+// ============================================================
+// Tab 切换
+// ============================================================
+
+function switchTab(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+
+  if (name === 'tasks')  loadTasks();
+  if (name === 'logs')   loadLogTaskList();
+  if (name === 'files')  { browseFiles(_currentFilePath); loadGitLog(); }
+  if (name === 'status') loadStatus();
+}
+
+// ============================================================
+// 全局 WebSocket：事件推送
+// ============================================================
+
+let _evtWs;
+function connectEvents() {
+  _evtWs = new WebSocket(wsUrl('/ws/events'));
+  _evtWs.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'task_status') {
+      // 刷新任务列表
+      const activePage = document.querySelector('.page.active')?.id;
+      if (activePage === 'page-tasks')  loadTasks();
+      if (activePage === 'page-status') loadStatus();
+      if (activePage === 'page-logs')   loadLogTaskList();
+
+      const statusNames = { executing:'开始执行', completed:'任务完成 ✓', failed:'任务失败 ✗', plan_review:'等待确认计划' };
+      const msg = statusNames[data.status];
+      if (msg) toast(`任务 #${data.task_id}: ${msg}`);
+    }
+  };
+  _evtWs.onclose = () => setTimeout(connectEvents, 3000);
+  _evtWs.onerror = () => _evtWs.close();
+}
+
+// ============================================================
+// 任务页
+// ============================================================
+
+async function submitTask() {
+  const input = document.getElementById('task-input');
+  const prompt = input.value.trim();
+  if (!prompt) { toast('请输入任务描述'); return; }
+
+  try {
+    const res = await api('/api/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ prompt }),
+    });
+    input.value = '';
+    input.style.height = 'auto';
+    toast(`任务 #${res.task.id} 已提交`);
+    loadTasks();
+  } catch (err) {
+    toast('提交失败: ' + err, 4000);
+  }
+}
+
+// Enter 发送（Shift+Enter 换行）
+document.getElementById('task-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    submitTask();
+  }
+});
+
+async function loadTasks() {
+  const status = document.getElementById('status-filter').value;
+  const container = document.getElementById('tasks-list');
+
+  try {
+    const res = await api('/api/tasks' + (status ? `?status=${status}` : ''));
+    const tasks = res.tasks;
+
+    if (!tasks.length) {
+      container.innerHTML = '<div class="empty">暂无任务</div>';
+      return;
+    }
+
+    container.innerHTML = tasks.map(t => taskCardHTML(t)).join('');
+  } catch (err) {
+    container.innerHTML = `<div class="empty" style="color:var(--red)">加载失败: ${err}</div>`;
+  }
+}
+
+function taskCardHTML(t) {
+  const statusLabel = {
+    pending: '待执行', planning: '规划中', plan_review: '等待确认',
+    executing: '执行中', completed: '已完成', failed: '失败',
+  }[t.status] || t.status;
+
+  const logPreview = t.log ? `
+    <div class="task-log-preview" id="log-preview-${t.id}">${escHtml(t.log.slice(-2000))}</div>` : '';
+
+  const actions = taskActions(t);
+
+  return `
+<div class="task-card" id="task-card-${t.id}">
+  <div class="task-header" onclick="toggleTask(${t.id})">
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span class="badge badge-${t.status}">${statusLabel}</span>
+        <span style="font-size:12px;color:var(--text-dim)">#${t.id}</span>
+      </div>
+      <div class="task-prompt">${escHtml(t.prompt)}</div>
+      <div class="task-meta">${fmtTime(t.created_at)}${t.completed_at ? ' · 完成: ' + fmtTime(t.completed_at) : ''}</div>
+    </div>
+    <span style="color:var(--text-dim);font-size:18px">›</span>
+  </div>
+  <div class="task-detail" id="task-detail-${t.id}">
+    <div class="task-full-prompt">${escHtml(t.prompt)}</div>
+    ${t.plan ? `<div class="section-title" style="margin-bottom:4px">执行计划</div><div class="task-full-prompt" style="color:var(--accent)">${escHtml(t.plan)}</div>` : ''}
+    ${t.error ? `<div style="color:var(--red);font-size:13px;margin-bottom:8px">错误: ${escHtml(t.error)}</div>` : ''}
+    ${logPreview}
+    <div class="task-actions">${actions}</div>
+  </div>
+</div>`;
+}
+
+function taskActions(t) {
+  const btns = [];
+  if (t.status === 'plan_review') {
+    btns.push(`<button class="btn btn-success btn-sm" onclick="approveTask(${t.id})">✓ 确认执行</button>`);
+    btns.push(`<button class="btn btn-danger btn-sm" onclick="rejectTask(${t.id})">✗ 拒绝</button>`);
+  }
+  if (t.status === 'failed') {
+    btns.push(`<button class="btn btn-warn btn-sm" onclick="retryTask(${t.id})">↺ 重试</button>`);
+  }
+  if (t.status === 'executing') {
+    btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewLog(${t.id})">📟 查看日志</button>`);
+  }
+  if (t.log) {
+    btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewLog(${t.id})">📟 查看日志</button>`);
+  }
+  btns.push(`<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteTask(${t.id})">🗑 删除</button>`);
+  return btns.join('');
+}
+
+function toggleTask(id) {
+  const detail = document.getElementById('task-detail-' + id);
+  detail.classList.toggle('open');
+}
+
+async function approveTask(id) {
+  try { await api(`/api/tasks/${id}/approve`, { method: 'POST' }); toast('已确认，任务将开始执行'); loadTasks(); }
+  catch (e) { toast('操作失败: ' + e, 4000); }
+}
+
+async function rejectTask(id) {
+  try { await api(`/api/tasks/${id}/reject`, { method: 'POST' }); toast('已拒绝'); loadTasks(); }
+  catch (e) { toast('操作失败: ' + e, 4000); }
+}
+
+async function retryTask(id) {
+  try { await api(`/api/tasks/${id}/retry`, { method: 'POST' }); toast('任务已重新加入队列'); loadTasks(); }
+  catch (e) { toast('操作失败: ' + e, 4000); }
+}
+
+async function deleteTask(id) {
+  if (!confirm('确定删除任务 #' + id + '?')) return;
+  try { await api(`/api/tasks/${id}`, { method: 'DELETE' }); toast('任务已删除'); loadTasks(); }
+  catch (e) { toast('删除失败: ' + e, 4000); }
+}
+
+function viewLog(id) {
+  document.getElementById('log-task-select').value = id;
+  switchLogTask();
+  switchTab('logs');
+}
+
+// ============================================================
+// 日志页
+// ============================================================
+
+let _logWs = null;
+let _currentLogTaskId = null;
+
+async function loadLogTaskList() {
+  const sel = document.getElementById('log-task-select');
+  const prev = sel.value;
+  try {
+    const res = await api('/api/tasks');
+    const tasks = res.tasks.filter(t => t.log || t.status === 'executing');
+    sel.innerHTML = '<option value="">-- 选择任务 --</option>' +
+      tasks.map(t => `<option value="${t.id}" ${t.id == prev ? 'selected' : ''}>#${t.id} [${t.status}] ${escHtml(t.prompt.slice(0,40))}</option>`).join('');
+    if (prev && !sel.value) sel.value = '';
+  } catch {}
+}
+
+function switchLogTask() {
+  const id = parseInt(document.getElementById('log-task-select').value);
+  if (!id) return;
+  openLogWs(id);
+}
+
+function openLogWs(taskId) {
+  if (_logWs) { _logWs.close(); _logWs = null; }
+  _currentLogTaskId = taskId;
+  document.getElementById('log-title').textContent = `任务 #${taskId}`;
+  document.getElementById('log-output').textContent = '';
+
+  _logWs = new WebSocket(wsUrl(`/ws/tasks/${taskId}/log`));
+  _logWs.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'history' || data.type === 'log') {
+      appendLog(data.text);
+    }
+  };
+  _logWs.onerror = () => { appendLog('\n[WebSocket 连接错误]\n'); };
+  _logWs.onclose = () => { if (_currentLogTaskId === taskId) appendLog('\n[连接已关闭]\n'); };
+}
+
+function appendLog(text) {
+  const out = document.getElementById('log-output');
+  out.textContent += text;
+  const autoScroll = document.getElementById('auto-scroll').checked;
+  if (autoScroll) out.scrollTop = out.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('log-output').textContent = '';
+}
+
+// ============================================================
+// 文件页
+// ============================================================
+
+let _currentFilePath = '';
+
+async function browseFiles(path) {
+  _currentFilePath = path;
+  updateBreadcrumb(path);
+  const browser = document.getElementById('file-browser');
+  browser.innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+
+  try {
+    const res = await api('/api/files?path=' + encodeURIComponent(path));
+    if (!res.items.length) {
+      browser.innerHTML = '<div class="empty">空目录</div>';
+      return;
+    }
+    browser.innerHTML = `<ul class="file-list">${res.items.map(item => `
+      <li class="file-item" onclick="${item.is_dir ? `browseFiles('${item.path}')` : `showFile('${item.path}')`}">
+        <span class="file-icon">${item.is_dir ? '📁' : fileIcon(item.name)}</span>
+        <span class="file-name">${escHtml(item.name)}</span>
+        <span class="file-size">${item.is_dir ? '' : fmtSize(item.size)}</span>
+      </li>`).join('')}</ul>`;
+  } catch (err) {
+    browser.innerHTML = `<div class="empty" style="color:var(--red)">${err}</div>`;
+  }
+}
+
+async function showFile(path) {
+  const browser = document.getElementById('file-browser');
+  browser.innerHTML = '<div class="empty"><div class="spinner"></div></div>';
+  updateBreadcrumb(path);
+
+  try {
+    const res = await api('/api/files/' + encodeURIComponent(path));
+    browser.innerHTML = `
+      <button class="btn btn-ghost btn-sm" style="margin-bottom:8px" onclick="browseFiles('${escAttr(pathParent(path))}')">← 返回</button>
+      <div class="file-content">${escHtml(res.content)}</div>`;
+  } catch (err) {
+    browser.innerHTML = `<div class="empty" style="color:var(--red)">${err}</div>`;
+  }
+}
+
+function updateBreadcrumb(path) {
+  const bc = document.getElementById('breadcrumb');
+  const parts = path ? path.split('/').filter(Boolean) : [];
+  let html = `<span class="breadcrumb-item" onclick="browseFiles('')">🏠 根目录</span>`;
+  let accum = '';
+  parts.forEach((p, i) => {
+    accum += (accum ? '/' : '') + p;
+    html += `<span class="breadcrumb-sep">/</span>`;
+    if (i < parts.length - 1) {
+      html += `<span class="breadcrumb-item" onclick="browseFiles('${escAttr(accum)}')">${escHtml(p)}</span>`;
+    } else {
+      html += `<span class="breadcrumb-cur">${escHtml(p)}</span>`;
+    }
+  });
+  bc.innerHTML = html;
+}
+
+function pathParent(path) {
+  const parts = path.split('/').filter(Boolean);
+  parts.pop();
+  return parts.join('/');
+}
+
+function fileIcon(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  const map = { py:'🐍', js:'📜', ts:'📜', html:'🌐', css:'🎨', json:'📋',
+    md:'📝', txt:'📝', sh:'⚡', yml:'⚙️', yaml:'⚙️', toml:'⚙️',
+    png:'🖼️', jpg:'🖼️', jpeg:'🖼️', gif:'🖼️', svg:'🖼️',
+    pdf:'📄', zip:'📦', gz:'📦', db:'🗃️' };
+  return map[ext] || '📄';
+}
+
+async function loadGitLog() {
+  const container = document.getElementById('git-log');
+  try {
+    const res = await api('/api/git/log?limit=10');
+    if (!res.commits.length) {
+      container.innerHTML = '<div class="empty">暂无提交记录</div>';
+      return;
+    }
+    container.innerHTML = res.commits.map(c => `
+      <div class="commit-item">
+        <div class="commit-hash">${c.hash.slice(0,8)}</div>
+        <div class="commit-msg">${escHtml(c.message)}</div>
+        <div class="commit-meta">${escHtml(c.author)} · ${fmtTime(c.date)}</div>
+      </div>`).join('');
+  } catch (err) {
+    container.innerHTML = `<div class="empty" style="color:var(--red)">${err}</div>`;
+  }
+}
+
+// ============================================================
+// 状态页
+// ============================================================
+
+async function loadStatus() {
+  try {
+    const res = await api('/api/status');
+    const counts = res.task_counts || {};
+    document.getElementById('s-pending').textContent   = counts.pending   || 0;
+    document.getElementById('s-executing').textContent = counts.executing || 0;
+    document.getElementById('s-completed').textContent = counts.completed || 0;
+    document.getElementById('s-failed').textContent    = counts.failed    || 0;
+
+    const wt = document.getElementById('worktree-list');
+    if (res.worktrees && res.worktrees.length) {
+      wt.innerHTML = res.worktrees.map(w => `
+        <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:13px;font-family:monospace">${escHtml(w.path)}</div>
+          <div style="font-size:11px;color:var(--text-dim)">分支: ${escHtml(w.branch || '—')} · HEAD: ${(w.head||'').slice(0,8)}</div>
+        </div>`).join('');
+    } else {
+      wt.innerHTML = '<div class="empty">暂无 Worktree</div>';
+    }
+  } catch (err) {
+    toast('加载状态失败: ' + err, 3000);
+  }
+
+  try {
+    const res = await api('/api/progress');
+    document.getElementById('progress-content').textContent = res.content || '空';
+  } catch {}
+}
+
+// ============================================================
+// 语音输入
+// ============================================================
+
+let _recognition = null;
+let _listening = false;
+
+function toggleVoice() {
+  if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+    toast('当前浏览器不支持语音输入');
+    return;
+  }
+
+  if (_listening) {
+    _recognition && _recognition.stop();
+    return;
+  }
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  _recognition = new SpeechRecognition();
+  _recognition.lang = 'zh-CN';
+  _recognition.continuous = false;
+  _recognition.interimResults = false;
+
+  _recognition.onstart = () => {
+    _listening = true;
+    document.getElementById('voice-btn').classList.add('listening');
+    toast('正在聆听…', 10000);
+  };
+  _recognition.onresult = e => {
+    const text = e.results[0][0].transcript;
+    const input = document.getElementById('task-input');
+    input.value = (input.value + text).trim();
+    autoResize(input);
+  };
+  _recognition.onend = () => {
+    _listening = false;
+    document.getElementById('voice-btn').classList.remove('listening');
+  };
+  _recognition.onerror = e => {
+    toast('语音识别错误: ' + e.error);
+    _listening = false;
+    document.getElementById('voice-btn').classList.remove('listening');
+  };
+
+  _recognition.start();
+}
+
+// ============================================================
+// 安全工具
+// ============================================================
+
+function escHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function escAttr(str) {
+  return String(str ?? '').replace(/'/g, "\\'");
+}
+
+// ============================================================
+// 初始化
+// ============================================================
+
+connectEvents();
+loadTasks();
+
+// 每 30 秒自动刷新当前页
+setInterval(() => {
+  const active = document.querySelector('.page.active')?.id;
+  if (active === 'page-tasks')  loadTasks();
+  if (active === 'page-status') loadStatus();
+}, 30000);
+</script>
+</body>
+</html>
