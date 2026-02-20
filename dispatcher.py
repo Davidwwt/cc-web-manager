@@ -148,6 +148,7 @@ async def execute_task(task: Dict[str, Any]) -> None:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             cwd=PROJECT_DIR,
+            limit=10 * 1024 * 1024,  # 10MB — 防止大行触发 StreamReader 默认 64KB 限制
         )
 
         async def _read_stream():
