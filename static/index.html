@@ -14,21 +14,22 @@
 <style>
 /* ===== CSS 变量 ===== */
 :root {
-  --bg:        #0d1117;
-  --bg2:       #161b22;
-  --bg3:       #21262d;
-  --border:    #30363d;
-  --text:      #e6edf3;
-  --text-dim:  #7d8590;
-  --accent:    #58a6ff;
-  --green:     #3fb950;
-  --yellow:    #d29922;
-  --red:       #f85149;
-  --purple:    #bc8cff;
-  --orange:    #ffa657;
-  --radius:    10px;
-  --tab-h:     56px;
-  --safe-bot:  env(safe-area-inset-bottom, 0px);
+  --bg:         #0d1117;
+  --bg2:        #161b22;
+  --bg3:        #21262d;
+  --border:     #30363d;
+  --text:       #e6edf3;
+  --text-dim:   #7d8590;
+  --accent:     #58a6ff;
+  --green:      #3fb950;
+  --yellow:     #d29922;
+  --red:        #f85149;
+  --purple:     #bc8cff;
+  --orange:     #ffa657;
+  --radius:     10px;
+  --tab-h:      56px;
+  --proj-bar-h: 48px;
+  --safe-bot:   env(safe-area-inset-bottom, 0px);
 }
 
 /* ===== 重置 ===== */
@@ -57,8 +58,60 @@ body {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding: 12px 12px 0;
+  min-height: 0;
 }
 .page.active { display: flex; flex-direction: column; }
+
+/* ===== 项目切换栏 ===== */
+#project-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+  height: var(--proj-bar-h);
+  flex-shrink: 0;
+}
+#project-bar .proj-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+#project-select {
+  flex: 1;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  outline: none;
+  min-width: 0;
+  cursor: pointer;
+}
+#project-select:focus { border-color: var(--accent); }
+#btn-new-project {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  border-radius: 6px;
+  width: 34px;
+  height: 34px;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s;
+}
+#btn-new-project:active { background: var(--bg); }
 
 /* ===== 底部 Tab 栏 ===== */
 .tab-bar {
@@ -112,6 +165,7 @@ body {
   white-space: nowrap;
 }
 .btn:active { opacity: .7; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
 .btn-primary  { background: var(--accent); color: #0d1117; }
 .btn-success  { background: var(--green);  color: #0d1117; }
 .btn-danger   { background: var(--red);    color: #fff; }
@@ -383,7 +437,7 @@ textarea.task-input {
   opacity: 0;
   transition: opacity .2s;
   white-space: nowrap;
-  z-index: 999;
+  z-index: 9999;
 }
 #toast.show { opacity: 1; }
 
@@ -397,11 +451,112 @@ select.filter-select {
   font-size: 13px;
   outline: none;
 }
+
+/* ===== 模态弹窗 ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.7);
+  display: flex;
+  align-items: flex-end;
+  z-index: 1000;
+  transition: opacity .2s;
+}
+.modal-overlay.hidden {
+  display: none;
+}
+.modal {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) 0 0;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding-bottom: calc(var(--safe-bot) + 16px);
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 22px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 6px;
+}
+.modal-body {
+  padding: 16px;
+}
+.form-group {
+  margin-bottom: 14px;
+}
+.form-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  margin-bottom: 6px;
+}
+.form-input {
+  width: 100%;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+}
+.form-input:focus { border-color: var(--accent); }
+.form-input::placeholder { color: var(--text-dim); }
+.form-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+}
+.form-check input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.form-check label {
+  font-size: 14px;
+  cursor: pointer;
+}
+.form-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
 </style>
 </head>
 
 <body>
 <div id="app">
+
+  <!-- ====== 项目切换栏 ====== -->
+  <div id="project-bar">
+    <span class="proj-label">项目</span>
+    <select id="project-select" onchange="switchProject(this.value)">
+      <option value="">加载中…</option>
+    </select>
+    <button id="btn-new-project" onclick="openCreateProject()" title="新建项目">＋</button>
+  </div>
 
   <!-- ====== 任务页 ====== -->
   <div class="page active" id="page-tasks">
@@ -514,6 +669,46 @@ select.filter-select {
       <span class="icon">⚙️</span>状态
     </button>
   </nav>
+
+  <!-- ====== 新建项目弹窗 ====== -->
+  <div id="modal-overlay" class="modal-overlay hidden" onclick="handleModalOverlayClick(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <span class="modal-title">新建项目</span>
+        <button class="modal-close" onclick="closeCreateProject()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="new-proj-name">项目名称 *</label>
+          <input class="form-input" type="text" id="new-proj-name" placeholder="My Awesome Project" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-proj-desc">项目描述</label>
+          <input class="form-input" type="text" id="new-proj-desc" placeholder="简短描述这个项目（可选）" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-proj-path">项目路径 *</label>
+          <input class="form-input" type="text" id="new-proj-path" placeholder="~/my-project 或 /home/ubuntu/my-project" autocomplete="off">
+          <div class="form-hint">目录不存在时自动创建并初始化 git 仓库</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-proj-remote">Git 远程地址</label>
+          <input class="form-input" type="text" id="new-proj-remote" placeholder="https://github.com/user/repo.git（可选）" autocomplete="off">
+          <div class="form-hint">提供后自动设置 origin 并尝试初始 push</div>
+        </div>
+        <div class="form-group">
+          <div class="form-check">
+            <input type="checkbox" id="new-proj-autopush" checked>
+            <label for="new-proj-autopush">每次任务完成后自动 Push</label>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-block" id="btn-create-project" onclick="createProject()">
+          创建项目
+        </button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <div id="toast"></div>
@@ -575,6 +770,132 @@ function autoResize(el) {
 }
 
 // ============================================================
+// 项目管理
+// ============================================================
+
+let _currentProjectId = null;
+let _projects = [];
+
+async function loadProjects() {
+  const sel = document.getElementById('project-select');
+  try {
+    const res = await api('/api/projects');
+    _projects = res.projects || [];
+
+    if (!_projects.length) {
+      sel.innerHTML = '<option value="">暂无项目</option>';
+      document.getElementById('tasks-list').innerHTML =
+        '<div class="empty">请先创建项目</div>';
+      return;
+    }
+
+    sel.innerHTML = _projects.map(p =>
+      `<option value="${p.id}">${escHtml(p.name)}</option>`
+    ).join('');
+
+    // 从 localStorage 恢复上次选中的项目
+    const saved = localStorage.getItem('cc_project_id');
+    const found = _projects.find(p => String(p.id) === String(saved));
+    const chosen = found ? found : _projects[0];
+
+    _currentProjectId = chosen.id;
+    sel.value = chosen.id;
+    localStorage.setItem('cc_project_id', String(chosen.id));
+
+    // 加载初始数据
+    loadTasks();
+  } catch (err) {
+    sel.innerHTML = '<option value="">加载失败</option>';
+    toast('加载项目失败: ' + err, 4000);
+  }
+}
+
+function switchProject(idStr) {
+  const id = parseInt(idStr);
+  if (!id || id === _currentProjectId) return;
+  _currentProjectId = id;
+  localStorage.setItem('cc_project_id', String(id));
+  _currentFilePath = ''; // 重置文件路径
+
+  // 刷新当前页
+  const active = document.querySelector('.page.active')?.id;
+  if (active === 'page-tasks')  loadTasks();
+  if (active === 'page-logs')   loadLogTaskList();
+  if (active === 'page-files')  { browseFiles(''); loadGitLog(); }
+  if (active === 'page-status') loadStatus();
+
+  const proj = _projects.find(p => p.id === id);
+  if (proj) toast('已切换到：' + proj.name);
+}
+
+function openCreateProject() {
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  setTimeout(() => document.getElementById('new-proj-name').focus(), 50);
+}
+
+function closeCreateProject() {
+  document.getElementById('modal-overlay').classList.add('hidden');
+  // 清空表单
+  ['new-proj-name', 'new-proj-desc', 'new-proj-path', 'new-proj-remote'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('new-proj-autopush').checked = true;
+  const btn = document.getElementById('btn-create-project');
+  btn.disabled = false;
+  btn.textContent = '创建项目';
+}
+
+function handleModalOverlayClick(e) {
+  if (e.target === document.getElementById('modal-overlay')) {
+    closeCreateProject();
+  }
+}
+
+async function createProject() {
+  const name     = document.getElementById('new-proj-name').value.trim();
+  const desc     = document.getElementById('new-proj-desc').value.trim();
+  const path     = document.getElementById('new-proj-path').value.trim();
+  const remote   = document.getElementById('new-proj-remote').value.trim();
+  const autoPush = document.getElementById('new-proj-autopush').checked;
+
+  if (!name) { toast('请输入项目名称'); document.getElementById('new-proj-name').focus(); return; }
+  if (!path) { toast('请输入项目路径'); document.getElementById('new-proj-path').focus(); return; }
+
+  const btn = document.getElementById('btn-create-project');
+  btn.disabled = true;
+  btn.textContent = '创建中…';
+
+  try {
+    const res = await api('/api/projects', {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        description: desc,
+        path,
+        git_remote: remote || null,
+        auto_push: autoPush,
+        max_workers: 1,
+      }),
+    });
+
+    toast(`项目「${name}」创建成功`);
+    closeCreateProject();
+
+    // 刷新项目列表并切换到新项目
+    await loadProjects();
+    const newId = res.project?.id;
+    if (newId) {
+      document.getElementById('project-select').value = newId;
+      switchProject(String(newId));
+    }
+  } catch (err) {
+    toast('创建失败: ' + err, 5000);
+    btn.disabled = false;
+    btn.textContent = '创建项目';
+  }
+}
+
+// ============================================================
 // Tab 切换
 // ============================================================
 
@@ -620,12 +941,13 @@ function connectEvents() {
 // ============================================================
 
 async function submitTask() {
+  if (!_currentProjectId) { toast('请先选择项目'); return; }
   const input = document.getElementById('task-input');
   const prompt = input.value.trim();
   if (!prompt) { toast('请输入任务描述'); return; }
 
   try {
-    const res = await api('/api/tasks', {
+    const res = await api(`/api/projects/${_currentProjectId}/tasks`, {
       method: 'POST',
       body: JSON.stringify({ prompt }),
     });
@@ -647,11 +969,13 @@ document.getElementById('task-input').addEventListener('keydown', e => {
 });
 
 async function loadTasks() {
+  if (!_currentProjectId) return;
   const status = document.getElementById('status-filter').value;
   const container = document.getElementById('tasks-list');
 
   try {
-    const res = await api('/api/tasks' + (status ? `?status=${status}` : ''));
+    const url = `/api/projects/${_currentProjectId}/tasks` + (status ? `?status=${status}` : '');
+    const res = await api(url);
     const tasks = res.tasks;
 
     if (!tasks.length) {
@@ -711,7 +1035,7 @@ function taskActions(t) {
   if (t.status === 'executing') {
     btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewLog(${t.id})">📟 查看日志</button>`);
   }
-  if (t.log) {
+  if (t.log && t.status !== 'executing') {
     btns.push(`<button class="btn btn-ghost btn-sm" onclick="viewLog(${t.id})">📟 查看日志</button>`);
   }
   btns.push(`<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteTask(${t.id})">🗑 删除</button>`);
@@ -758,10 +1082,11 @@ let _logWs = null;
 let _currentLogTaskId = null;
 
 async function loadLogTaskList() {
+  if (!_currentProjectId) return;
   const sel = document.getElementById('log-task-select');
   const prev = sel.value;
   try {
-    const res = await api('/api/tasks');
+    const res = await api(`/api/projects/${_currentProjectId}/tasks`);
     const tasks = res.tasks.filter(t => t.log || t.status === 'executing');
     sel.innerHTML = '<option value="">-- 选择任务 --</option>' +
       tasks.map(t => `<option value="${t.id}" ${t.id == prev ? 'selected' : ''}>#${t.id} [${t.status}] ${escHtml(t.prompt.slice(0,40))}</option>`).join('');
@@ -810,19 +1135,20 @@ function clearLog() {
 let _currentFilePath = '';
 
 async function browseFiles(path) {
+  if (!_currentProjectId) return;
   _currentFilePath = path;
   updateBreadcrumb(path);
   const browser = document.getElementById('file-browser');
   browser.innerHTML = '<div class="empty"><div class="spinner"></div></div>';
 
   try {
-    const res = await api('/api/files?path=' + encodeURIComponent(path));
+    const res = await api(`/api/projects/${_currentProjectId}/files?path=${encodeURIComponent(path)}`);
     if (!res.items.length) {
       browser.innerHTML = '<div class="empty">空目录</div>';
       return;
     }
     browser.innerHTML = `<ul class="file-list">${res.items.map(item => `
-      <li class="file-item" onclick="${item.is_dir ? `browseFiles('${item.path}')` : `showFile('${item.path}')`}">
+      <li class="file-item" onclick="${item.is_dir ? `browseFiles('${escAttr(item.path)}')` : `showFile('${escAttr(item.path)}')`}">
         <span class="file-icon">${item.is_dir ? '📁' : fileIcon(item.name)}</span>
         <span class="file-name">${escHtml(item.name)}</span>
         <span class="file-size">${item.is_dir ? '' : fmtSize(item.size)}</span>
@@ -843,7 +1169,9 @@ async function showFile(path) {
       <button class="btn btn-ghost btn-sm" style="margin-bottom:8px" onclick="browseFiles('${escAttr(pathParent(path))}')">← 返回</button>
       <div class="file-content">${escHtml(res.content)}</div>`;
   } catch (err) {
-    browser.innerHTML = `<div class="empty" style="color:var(--red)">${err}</div>`;
+    browser.innerHTML = `
+      <button class="btn btn-ghost btn-sm" style="margin-bottom:8px" onclick="browseFiles('${escAttr(pathParent(path))}')">← 返回</button>
+      <div class="empty" style="color:var(--red)">${err}</div>`;
   }
 }
 
@@ -880,9 +1208,10 @@ function fileIcon(name) {
 }
 
 async function loadGitLog() {
+  if (!_currentProjectId) return;
   const container = document.getElementById('git-log');
   try {
-    const res = await api('/api/git/log?limit=10');
+    const res = await api(`/api/projects/${_currentProjectId}/git/log?limit=10`);
     if (!res.commits.length) {
       container.innerHTML = '<div class="empty">暂无提交记录</div>';
       return;
@@ -1000,7 +1329,7 @@ function escAttr(str) {
 // ============================================================
 
 connectEvents();
-loadTasks();
+loadProjects(); // loadProjects() 完成后会调用 loadTasks()
 
 // 每 30 秒自动刷新当前页
 setInterval(() => {
