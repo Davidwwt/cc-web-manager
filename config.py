@@ -7,9 +7,21 @@ HOST = "0.0.0.0"
 PORT = 8000
 
 # --- 安全配置 ---
-# 访问 Token，首次运行自动生成，也可手动指定
+# 访问 Token，首次运行自动生成并持久化到文件，重启后保持不变
 # 环境变量优先: export CC_TOKEN=your_token
-ACCESS_TOKEN = os.environ.get("CC_TOKEN", secrets.token_urlsafe(16))
+def _load_or_create_token() -> str:
+    """从文件加载 Token，不存在则生成并保存，保证重启后 Token 不变"""
+    token_file = os.path.join(os.path.dirname(__file__), "data", ".access_token")
+    if os.path.exists(token_file):
+        token = open(token_file).read().strip()
+        if token:
+            return token
+    token = secrets.token_urlsafe(16)
+    os.makedirs(os.path.dirname(token_file), exist_ok=True)
+    open(token_file, "w").write(token)
+    return token
+
+ACCESS_TOKEN = os.environ.get("CC_TOKEN") or _load_or_create_token()
 
 # --- Claude Code 配置 ---
 # 并行 worktree 数量（Phase 1 先用 1，稳定后再增加）
