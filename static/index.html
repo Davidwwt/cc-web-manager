@@ -651,6 +651,12 @@ select.filter-select {
     <div class="section-title" style="margin-top:6px">PROGRESS.md</div>
     <div class="progress-content" id="progress-content">加载中…</div>
 
+    <div style="margin-top:16px">
+      <button class="btn btn-danger btn-block" onclick="confirmRestart()" id="btn-restart">
+        🔄 重启服务
+      </button>
+    </div>
+
     <div style="margin-bottom:16px"></div>
   </div>
 
@@ -1322,6 +1328,27 @@ function escHtml(str) {
 
 function escAttr(str) {
   return String(str ?? '').replace(/'/g, "\\'");
+}
+
+// ============================================================
+// 重启服务
+// ============================================================
+
+function confirmRestart() {
+  if (!confirm('确定要重启服务吗？\n页面将在 3 秒后自动刷新。')) return;
+  const btn = document.getElementById('btn-restart');
+  btn.disabled = true;
+  btn.textContent = '正在重启…';
+  api('/api/restart', { method: 'POST' })
+    .then(() => {
+      toast('重启指令已发送，3 秒后刷新页面…', 3500);
+      setTimeout(() => location.reload(), 3000);
+    })
+    .catch(err => {
+      toast('重启失败: ' + err, 4000);
+      btn.disabled = false;
+      btn.textContent = '🔄 重启服务';
+    });
 }
 
 // ============================================================

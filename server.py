@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 import textwrap
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -572,6 +573,29 @@ async def git_log(limit: int = Query(20, ge=1, le=100)):
 # ---------------------------------------------------------------------------
 # REST API — 系统状态 & PROGRESS.md
 # ---------------------------------------------------------------------------
+
+
+@app.post("/api/restart", dependencies=[Depends(verify_token)])
+async def restart_service():
+    """重启 cc-manager systemd 服务"""
+    try:
+        result = subprocess.run(
+            ["sudo", "systemctl", "restart", "cc-manager"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            raise HTTPException(
+                status_code=500,
+                detail=f"重启失败: {result.stderr.strip() or result.stdout.strip()}",
+            )
+        return {"ok": True}
+    except subprocess.TimeoutExpired:
+        # 重启命令触发后服务会自我终止，超时是预期行为
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/progress", dependencies=[Depends(verify_token)])
