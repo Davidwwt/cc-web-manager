@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 _log_subscribers: Dict[int, Set[Callable]] = {}
 # 全局事件订阅（任务状态变更）
 _event_subscribers: Set[Callable] = set()
+# task_id -> 回调集合（对话流式订阅）
+_chat_subscribers: Dict[int, Set[Callable]] = {}
+# task_id -> 当前对话的流式缓冲（供晚连接的 WS 重放）
+_chat_buffers: Dict[int, list] = {}
 
 
 def subscribe_log(task_id: int, callback: Callable) -> None:
@@ -48,6 +52,35 @@ async def _broadcast_log(task_id: int, text: str) -> None:
     _log_subscribers.get(task_id, set()).difference_update(dead)
 
 
+def subscribe_chat(task_id: int, callback: Callable) -> None:
+    _chat_subscribers.setdefault(task_id, set()).add(callback)
+
+
+def unsubscribe_chat(task_id: int, callback: Callable) -> None:
+    _chat_subscribers.get(task_id, set()).discard(callback)
+
+
+def get_chat_buffer(task_id: int) -> list:
+    return list(_chat_buffers.get(task_id, []))
+
+
+async def _broadcast_chat(task_id: int, data: Dict[str, Any]) -> None:
+    """向该任务的对话订阅者广播，并维护缓冲供晚连接的 WS 重放"""
+    buf = _chat_buffers.setdefault(task_id, [])
+    buf.append(data)
+
+    dead: Set[Callable] = set()
+    for cb in list(_chat_subscribers.get(task_id, set())):
+        try:
+            await cb(data)
+        except Exception:
+            dead.add(cb)
+    _chat_subscribers.get(task_id, set()).difference_update(dead)
+
+    if data.get("type") == "chat_done":
+        _chat_buffers.pop(task_id, None)
+
+
 async def _broadcast_event(event: Dict[str, Any]) -> None:
     """向所有全局事件订阅者广播事件"""
     dead: Set[Callable] = set()
@@ -63,47 +96,74 @@ async def _broadcast_event(event: Dict[str, Any]) -> None:
 # 日志解析：从 stream-json 提取可读文本
 # ---------------------------------------------------------------------------
 
+def _tool_brief(name: str, inp: dict) -> str:
+    """将工具调用转换为简短的中文描述"""
+    name_l = name.lower()
+    path = inp.get("path") or inp.get("file_path") or inp.get("notebook_path") or ""
+    cmd = inp.get("command", "")
+
+    if "write" in name_l or "create" in name_l:
+        return f"  ✍ 写入: {path}"
+    if "read" in name_l:
+        return f"  📖 读取: {path}"
+    if "edit" in name_l or "replace" in name_l:
+        return f"  ✏ 编辑: {path}"
+    if "bash" in name_l or "execute" in name_l:
+        return f"  $ {cmd[:100]}"
+    if "glob" in name_l:
+        return f"  🔍 查找: {inp.get('pattern', '')}"
+    if "grep" in name_l:
+        return f"  🔍 搜索: {inp.get('pattern', '')}"
+    if "task" in name_l:
+        return f"  🤖 子任务"
+    if "todo" in name_l:
+        return f"  📋 任务列表"
+    return f"  [{name}]"
+
+
 def _extract_display_text(raw_line: str) -> str:
     """
-    尝试从 stream-json 行中提取人类可读的文本。
-    无法解析时原样返回。
+    从 stream-json 行中提取人类可读的简洁文本。
+    只显示 assistant 的文字和工具调用摘要，跳过原始 JSON。
     """
     line = raw_line.strip()
     if not line:
-        return raw_line
+        return ""
     try:
         data = json.loads(line)
         event_type = data.get("type", "")
 
-        # assistant 消息
+        # assistant 消息：显示文字 + 简洁工具摘要
         if event_type == "assistant":
             msg = data.get("message", {})
             parts = []
             for block in msg.get("content", []):
                 if block.get("type") == "text":
-                    parts.append(block["text"])
+                    text = block["text"].strip()
+                    if text:
+                        parts.append(text)
                 elif block.get("type") == "tool_use":
-                    name = block.get("name", "tool")
-                    inp = json.dumps(block.get("input", {}), ensure_ascii=False)
-                    parts.append(f"[{name}] {inp}")
-            if parts:
-                return "\n".join(parts) + "\n"
+                    parts.append(_tool_brief(block.get("name", "tool"), block.get("input", {})))
+            return "\n".join(parts) + "\n" if parts else ""
 
-        # tool 结果
+        # tool_result：跳过（太冗长）
         if event_type == "tool_result":
-            content = data.get("content", "")
-            if isinstance(content, list):
-                texts = [c.get("text", "") for c in content if c.get("type") == "text"]
-                content = "\n".join(texts)
-            return f"[tool_result] {content}\n" if content else raw_line
+            return ""
 
-        # 系统消息 / 统计信息
-        if event_type in ("system", "result"):
-            return raw_line
+        # result：显示完成/失败简报
+        if event_type == "result":
+            is_error = data.get("is_error", False)
+            result_text = data.get("result", "")
+            if is_error and result_text:
+                return f"\n[失败] {result_text}\n"
+            return "\n[完成]\n" if not is_error else ""
+
+        # system、其他：静默跳过
+        return ""
 
     except (json.JSONDecodeError, KeyError, TypeError):
         pass
-    return raw_line
+    return ""  # 无法解析的原始 JSON 行不展示
 
 
 # ---------------------------------------------------------------------------
@@ -310,6 +370,83 @@ async def execute_task(task: Dict[str, Any]) -> None:
             "status": "failed",
             "error": str(exc),
         })
+
+
+# ---------------------------------------------------------------------------
+# 对话功能：对已完成任务继续提问
+# ---------------------------------------------------------------------------
+
+CHAT_TIMEOUT = 300  # 5 分钟
+
+
+async def execute_chat(
+    task_id: int,
+    user_message: str,
+    prior_messages: list,
+    project_dir: str,
+) -> str:
+    """
+    对已完成任务执行一轮对话，流式广播响应，返回完整响应文本。
+    prior_messages: 当前消息之前的历史 [{role, content}, ...]
+    """
+    # 构建带上下文的 prompt
+    if prior_messages:
+        history_lines = []
+        for m in prior_messages:
+            role_label = "用户" if m["role"] == "user" else "Claude"
+            content = m["content"]
+            if m["role"] == "assistant" and len(content) > 600:
+                content = content[:600] + "…（已截断）"
+            history_lines.append(f"{role_label}：{content}")
+        history = "\n\n".join(history_lines)
+        prompt = f"以下是关于本项目的对话历史：\n\n{history}\n\n用户新问题：{user_message}"
+    else:
+        prompt = user_message
+
+    cmd = [
+        "claude", "-p", prompt,
+        "--dangerously-skip-permissions",
+        "--output-format", "stream-json",
+        "--verbose",
+    ]
+
+    response_parts: list[str] = []
+
+    async def _stream():
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=project_dir,
+            limit=10 * 1024 * 1024,
+        )
+        assert process.stdout is not None
+        async for raw_bytes in process.stdout:
+            raw_line = raw_bytes.decode("utf-8", errors="replace")
+            display = _extract_display_text(raw_line)
+            if display:
+                response_parts.append(display)
+                await _broadcast_chat(task_id, {"type": "chat_chunk", "text": display})
+        await process.wait()
+
+    try:
+        await asyncio.wait_for(_stream(), timeout=CHAT_TIMEOUT)
+    except asyncio.TimeoutError:
+        err = "\n[对话超时，请重试]\n"
+        response_parts.append(err)
+        await _broadcast_chat(task_id, {"type": "chat_chunk", "text": err})
+    except FileNotFoundError:
+        err = "[找不到 claude 命令]"
+        response_parts.append(err)
+        await _broadcast_chat(task_id, {"type": "chat_chunk", "text": err})
+    except Exception as exc:
+        err = f"[错误: {exc}]"
+        response_parts.append(err)
+        await _broadcast_chat(task_id, {"type": "chat_chunk", "text": err})
+    finally:
+        await _broadcast_chat(task_id, {"type": "chat_done"})
+
+    return "".join(response_parts).strip()
 
 
 # ---------------------------------------------------------------------------

@@ -55,6 +55,17 @@ async def init_db():
         # 迁移：为已存在的 tasks 表添加 project_id 列
         await _add_column_if_not_exists(db, "tasks", "project_id", "INTEGER REFERENCES projects(id)")
 
+        # --- task_messages 表（对话历史） ---
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS task_messages (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id     INTEGER NOT NULL REFERENCES tasks(id),
+                role        TEXT NOT NULL,
+                content     TEXT NOT NULL DEFAULT '',
+                created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         await db.commit()
 
 
@@ -251,6 +262,39 @@ async def delete_task(task_id: int) -> bool:
         cur = await db.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         await db.commit()
         return cur.rowcount > 0
+
+
+async def create_message(task_id: int, role: str, content: str = "") -> int:
+    """创建对话消息，返回消息 ID"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "INSERT INTO task_messages (task_id, role, content, created_at) VALUES (?, ?, ?, ?)",
+            (task_id, role, content, datetime.utcnow().isoformat()),
+        )
+        await db.commit()
+        return cursor.lastrowid
+
+
+async def get_messages(task_id: int) -> List[Dict[str, Any]]:
+    """获取任务的对话历史"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM task_messages WHERE task_id = ? ORDER BY created_at ASC",
+            (task_id,),
+        ) as cur:
+            rows = await cur.fetchall()
+        return [_row_to_dict(r) for r in rows]
+
+
+async def update_message(message_id: int, content: str) -> None:
+    """更新消息内容（用于保存流式输出的最终结果）"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE task_messages SET content = ? WHERE id = ?",
+            (content, message_id),
+        )
+        await db.commit()
 
 
 async def backup_db(backup_dir: str) -> str:

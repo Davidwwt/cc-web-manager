@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.pyo
+backups/
+logs/
+data/tasks.db

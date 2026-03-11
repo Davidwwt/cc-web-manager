@@ -97,6 +97,10 @@ class TaskApprove(BaseModel):
     pass
 
 
+class ChatMessageCreate(BaseModel):
+    content: str
+
+
 class ProjectCreate(BaseModel):
     name: str
     description: str = ""
@@ -468,6 +472,55 @@ async def retry_task(task_id: int):
     return {"ok": True}
 
 
+@app.get("/api/tasks/{task_id}/messages", dependencies=[Depends(verify_token)])
+async def get_task_messages(task_id: int):
+    """获取任务的对话历史"""
+    task = await database.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    messages = await database.get_messages(task_id)
+    return {"messages": messages}
+
+
+@app.post("/api/tasks/{task_id}/chat", dependencies=[Depends(verify_token)])
+async def chat_with_task(task_id: int, body: ChatMessageCreate):
+    """向已完成/失败的任务发送后续对话消息"""
+    task = await database.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task["status"] not in ("completed", "failed"):
+        raise HTTPException(status_code=400, detail="只能对已完成或失败的任务继续对话")
+
+    content = body.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="消息不能为空")
+
+    # 获取已有历史（不含当前消息）
+    prior_messages = await database.get_messages(task_id)
+
+    # 保存用户消息
+    user_msg_id = await database.create_message(task_id, "user", content)
+
+    # 创建空的 assistant 占位消息
+    asst_msg_id = await database.create_message(task_id, "assistant", "")
+
+    # 确定项目目录
+    project_dir = PROJECT_DIR
+    if task.get("project_id"):
+        project = await database.get_project(task["project_id"])
+        if project:
+            project_dir = project["path"]
+
+    # 后台执行对话
+    async def run_chat():
+        response = await dispatcher.execute_chat(task_id, content, prior_messages, project_dir)
+        await database.update_message(asst_msg_id, response)
+
+    asyncio.create_task(run_chat())
+
+    return {"ok": True, "user_message_id": user_msg_id, "assistant_message_id": asst_msg_id}
+
+
 @app.delete("/api/tasks/{task_id}", dependencies=[Depends(verify_token)])
 async def delete_task(task_id: int):
     """删除任务"""
@@ -655,6 +708,54 @@ async def ws_task_log(websocket: WebSocket, task_id: int, token: Optional[str] =
         pass
     finally:
         dispatcher.unsubscribe_log(task_id, send_log)
+
+
+# ---------------------------------------------------------------------------
+# WebSocket — 对话流式推送
+# ---------------------------------------------------------------------------
+
+
+@app.websocket("/ws/tasks/{task_id}/chat")
+async def ws_task_chat(websocket: WebSocket, task_id: int, token: Optional[str] = Query(None)):
+    if token != ACCESS_TOKEN:
+        await websocket.close(code=4001)
+        return
+
+    await websocket.accept()
+
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def enqueue(data: dict):
+        await queue.put(data)
+
+    # 先订阅，再重放缓冲，避免漏消息
+    dispatcher.subscribe_chat(task_id, enqueue)
+
+    try:
+        # 重放已缓冲的 chunk（处理 WS 晚于执行启动的情况）
+        buffered = dispatcher.get_chat_buffer(task_id)
+        for chunk in buffered:
+            await websocket.send_text(json.dumps(chunk))
+
+        # 如果缓冲中已有 done，直接结束
+        if buffered and buffered[-1].get("type") == "chat_done":
+            return
+
+        # 持续从队列接收并推送
+        while True:
+            try:
+                data = await asyncio.wait_for(queue.get(), timeout=310)
+                # 跳过缓冲中已发过的 chunk
+                if data not in buffered:
+                    await websocket.send_text(json.dumps(data))
+                if data.get("type") == "chat_done":
+                    break
+            except asyncio.TimeoutError:
+                break
+    except WebSocketDisconnect:
+        pass
+    finally:
+        dispatcher.unsubscribe_chat(task_id, enqueue)
 
 
 # ---------------------------------------------------------------------------
