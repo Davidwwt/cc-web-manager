@@ -1152,7 +1152,7 @@ function taskCardHTML(t) {
     <div class="task-actions">${actions}</div>
     ${canChat ? `
     <div class="chat-section">
-      <div class="chat-section-title">继续对话</div>
+      <div class="chat-section-title">对话</div>
       <div class="chat-messages" id="chat-msgs-${t.id}">
         <div style="color:var(--text-dim);font-size:12px;text-align:center">加载中…</div>
       </div>
@@ -1476,8 +1476,11 @@ async function loadChatMessages(taskId) {
 function renderChatMessages(taskId, messages) {
   const container = document.getElementById('chat-msgs-' + taskId);
   if (!container) return;
+  // 更新标题：有消息时改为"继续对话"，无消息时保持默认
+  const titleEl = container.closest('.chat-section')?.querySelector('.chat-section-title');
+  if (titleEl) titleEl.textContent = messages.length ? '继续对话' : '对话';
   if (!messages.length) {
-    container.innerHTML = '<div style="color:var(--text-dim);font-size:12px;text-align:center">暂无对话，可直接提问</div>';
+    container.innerHTML = '<div style="color:var(--text-dim);font-size:12px;text-align:center">可直接提问或请求修改</div>';
     return;
   }
   container.innerHTML = messages.map(m => `

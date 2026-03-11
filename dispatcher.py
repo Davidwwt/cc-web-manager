@@ -243,6 +243,8 @@ async def execute_task(task: Dict[str, Any]) -> None:
     line_count = 0
     # 从 stream-json 的 result 行解析出的成功/失败信息
     claude_result: Dict[str, Any] = {}
+    # 累积可读展示文本，供任务卡片对话区回显
+    display_parts: list[str] = []
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -272,6 +274,8 @@ async def execute_task(task: Dict[str, Any]) -> None:
                         pass
 
                     display = _extract_display_text(raw_line)
+                    if display:
+                        display_parts.append(display)
                     await _broadcast_log(task_id, display)
 
                     line_count += 1
@@ -313,6 +317,13 @@ async def execute_task(task: Dict[str, Any]) -> None:
                 log=full_log,
                 completed_at=datetime.utcnow().isoformat(),
             )
+            # 保存最终结果作为第一条助手消息，供对话界面展示
+            # 优先用 result 字段，否则回退到执行过程中的累积可读文本
+            final_result_text = claude_result.get("result", "") if claude_result else ""
+            if not final_result_text:
+                final_result_text = "".join(display_parts).strip()
+            if final_result_text:
+                await database.create_message(task_id, "assistant", final_result_text)
             await _broadcast_event({
                 "type": "task_status",
                 "task_id": task_id,
@@ -335,6 +346,9 @@ async def execute_task(task: Dict[str, Any]) -> None:
                 error=error_msg,
                 completed_at=datetime.utcnow().isoformat(),
             )
+            # 保存最终结果作为第一条助手消息，供对话界面展示
+            if error_msg:
+                await database.create_message(task_id, "assistant", error_msg)
             await _broadcast_event({
                 "type": "task_status",
                 "task_id": task_id,

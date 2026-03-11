@@ -479,6 +479,16 @@ async def get_task_messages(task_id: int):
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
     messages = await database.get_messages(task_id)
+    # 若尚无消息但有日志，从日志提取可读文本作为初始助手消息
+    if not messages and task.get("log"):
+        display_lines = []
+        for raw_line in task["log"].splitlines(keepends=True):
+            text = dispatcher._extract_display_text(raw_line)
+            if text:
+                display_lines.append(text)
+        summary = "".join(display_lines).strip()
+        if summary:
+            messages = [{"id": 0, "task_id": task_id, "role": "assistant", "content": summary, "created_at": task.get("completed_at", "")}]
     return {"messages": messages}
 
 
