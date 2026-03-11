@@ -167,6 +167,101 @@ def _extract_display_text(raw_line: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# PROGRESS.md 经验注入
+# ---------------------------------------------------------------------------
+
+# cc-web-manager 自身目录（PROGRESS.md 所在位置）
+_MANAGER_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 注入的最大字符数，避免占用太多上下文
+_PROGRESS_MAX_CHARS = 4000
+
+
+async def _build_prompt_with_progress(prompt: str) -> str:
+    """
+    读取 PROGRESS.md 并将历史经验注入到 prompt 前缀。
+    若文件不存在或内容为空则直接返回原始 prompt。
+    """
+    progress_path = os.path.join(_MANAGER_DIR, "PROGRESS.md")
+    try:
+        loop = asyncio.get_event_loop()
+        content = await loop.run_in_executor(
+            None, lambda: open(progress_path, encoding="utf-8").read()
+        )
+        content = content.strip()
+        if not content:
+            return prompt
+        # 只取最近的部分，避免 context 过长
+        if len(content) > _PROGRESS_MAX_CHARS:
+            content = "...\n" + content[-_PROGRESS_MAX_CHARS:]
+        return (
+            f"# 项目历史经验（来自 PROGRESS.md）\n\n"
+            f"{content}\n\n"
+            f"---\n\n"
+            f"# 当前任务\n\n"
+            f"{prompt}"
+        )
+    except FileNotFoundError:
+        return prompt
+    except Exception as exc:
+        logger.warning(f"读取 PROGRESS.md 失败，跳过注入: {exc}")
+        return prompt
+
+
+# ---------------------------------------------------------------------------
+# PROGRESS.md 自动更新
+# ---------------------------------------------------------------------------
+
+async def _update_progress_md(task_id: int, prompt: str, status: str, result_summary: str) -> None:
+    """任务完成/失败后，让 Claude Code 总结经验教训并追加到 PROGRESS.md"""
+    progress_path = os.path.join(_MANAGER_DIR, "PROGRESS.md")
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    status_cn = "成功" if status == "completed" else "失败"
+
+    update_prompt = (
+        f"请阅读并总结刚才执行的任务经验，将其追加到 {progress_path} 文件末尾。\n\n"
+        f"任务描述：{prompt[:300]}\n"
+        f"执行状态：{status_cn}\n"
+        f"结果摘要：{result_summary[:600] if result_summary else '（无）'}\n\n"
+        f"请用以下 Markdown 格式追加（只追加，不要修改已有内容）：\n\n"
+        f"### {today} — [任务简短标题]\n\n"
+        f"**任务**\n- [一句话描述]\n\n"
+        f"**结果**\n- 状态: {status_cn}\n- [主要完成或失败内容]\n\n"
+        f"**注意事项**\n- [遇到的问题或值得注意的点]\n- [下次应该注意什么]\n\n"
+        f"---\n"
+    )
+
+    cmd = [
+        "claude", "-p", update_prompt,
+        "--dangerously-skip-permissions",
+        "--output-format", "stream-json",
+        "--verbose",
+    ]
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=_MANAGER_DIR,
+            limit=10 * 1024 * 1024,
+        )
+        try:
+            await asyncio.wait_for(process.communicate(), timeout=120)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+            logger.warning(f"任务 {task_id}: 更新 PROGRESS.md 超时（120s）")
+            return
+        if process.returncode == 0:
+            logger.info(f"任务 {task_id}: PROGRESS.md 已更新")
+        else:
+            logger.warning(f"任务 {task_id}: 更新 PROGRESS.md 失败 (exit={process.returncode})")
+    except Exception as exc:
+        logger.warning(f"任务 {task_id}: 更新 PROGRESS.md 异常: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Git push 辅助
 # ---------------------------------------------------------------------------
 
@@ -232,8 +327,11 @@ async def execute_task(task: Dict[str, Any]) -> None:
     os.makedirs(LOG_DIR, exist_ok=True)
     log_file_path = os.path.join(LOG_DIR, f"task_{task_id}.log")
 
+    # 将 PROGRESS.md 的历史经验注入到 prompt 前缀
+    enriched_prompt = await _build_prompt_with_progress(prompt)
+
     cmd = [
-        "claude", "-p", prompt,
+        "claude", "-p", enriched_prompt,
         "--dangerously-skip-permissions",
         "--output-format", "stream-json",
         "--verbose",
@@ -333,6 +431,10 @@ async def execute_task(task: Dict[str, Any]) -> None:
             if auto_push:
                 logger.info(f"任务 {task_id}: auto_push=True，执行 git push origin...")
                 await _git_push(project_dir, task_id)
+            # 后台更新 PROGRESS.md（不阻塞主流程）
+            asyncio.create_task(
+                _update_progress_md(task_id, prompt, "completed", final_result_text)
+            )
         else:
             # 优先取 claude result 里的错误信息，否则用退出码
             if claude_result:
@@ -355,6 +457,10 @@ async def execute_task(task: Dict[str, Any]) -> None:
                 "status": "failed",
                 "error": error_msg,
             })
+            # 后台更新 PROGRESS.md（不阻塞主流程）
+            asyncio.create_task(
+                _update_progress_md(task_id, prompt, "failed", error_msg)
+            )
 
     except FileNotFoundError:
         error_msg = "找不到 claude 命令，请确认 Claude Code 已安装并在 PATH 中"
